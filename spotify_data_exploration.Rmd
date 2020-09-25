@@ -1,0 +1,209 @@
+---
+title: "Spotify Data Exploration"
+author: "Bridget Daly"
+date: "9/22/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+This project is an exploratory analysis of the "Spotify Dataset 1921-2020, 160k+ Tracks" uploaded to [kaggle](https://www.kaggle.com/yamaerenay/spotify-dataset-19212020-160k-tracks) by Yamac Eren Ay who sourced the data via the Spotify Web API. Inspiration taken from the labs in the [Introduction to Statistical Learning](http://faculty.marshall.usc.edu/gareth-james/ISL/) by Gareth James, Daniela Witten, Trevor Hastie and Robert Tibshirani.
+
+## Data Exploration
+
+I will first load and preview the dataset and take a look at the variable types.
+
+```{r datlocation, echo=FALSE}
+dat_path = "/Users/bridgetdaly/Projects/Other_Projects/spotify_data.csv"
+```
+
+```{r upload, message=FALSE}
+library(magrittr)
+library(tidyverse)
+library(skimr)
+
+dat_raw <- read_csv(dat_path)
+head(dat_raw)
+skim(dat_raw) %>% select(skim_type, skim_variable, n_missing, character.n_unique)
+```
+
+From this summary I see that there are `r nrow(dat_raw)` rows in the dataset, unique by the character attribute `id`, Spotify's track identifier. There is no missing data in any column. Aside from id, there are three other character attributes: `artists`, `name`, and `release_date`. I want to dive deeper into the `artists` column. There are `r n_unique(dat_raw$artists)` unique artists, so naively dividing the number of tracks by the number of artists yields an average of `r round(n_unique(dat_raw$id)/n_unique(dat_raw$artists),0)` tracks per artist.
+
+```{r artisthist}
+dat_raw %>% group_by(artists) %>% 
+  summarise(tracks = n()) %>% 
+  ggplot(aes(tracks, y = ..density..)) +
+  geom_histogram(bins = 200) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_minimal() +
+  ggtitle("Tracks per Artists")
+```
+
+The histogram for this metric shows that tracks per artist is right-skewed with a long tail. Who are the most prolific artists?
+
+```{r artisttop}
+dat_raw %>% group_by(artists) %>% 
+  summarise(tracks = n()) %>%
+  arrange(desc(tracks)) %>% 
+  head(10)
+```
+
+Two of the top three artists are actually Russian spellings of authors: Эрнест Хемингуэй is Ernest Hemmingway and Эрих Мария Ремарк Erich Maria Remarque. Perhaps these "tracks" are audio recordings of their works. Removing the artists with the top 1% of tracks gives a cleaner look at tracks per artist, which is still very right-skewed.
+
+```{r artistcleanhist}
+dat_raw %>% group_by(artists) %>% 
+  summarise(tracks = n()) %>%
+  ungroup() %>%
+  filter(tracks < quantile(tracks, 0.99)) %>% 
+  ggplot(aes(tracks, y = ..density..)) +
+  geom_histogram(bins = 50) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_minimal() +
+  ggtitle("Tracks per Artist - Top 1% Removed")
+```
+
+One reason for the strong right skew is that each unique collaboration is treated as an independent artist. Let's use Imagine Dragons as an example. We can see that Imagine Dragons has 55 tracks, but they also have 5 unique collaborations with other artists. Each of these collaborations is counted as an artist with 1-2 tracks, skewing the tracks per artist metric. One solution is to remove collaborations entirely. Another is to credit each track to each collaborating artist. I'll apply these two methods to this dataset.
+
+```{r artistsplit, warning=FALSE}
+dat_raw %>% group_by(artists) %>% 
+  summarise(tracks = n()) %>%
+  filter(str_detect(artists,"Imagine Dragons"))
+
+# Remove collaborations
+dat_raw %>% select(artists, id) %>% 
+  mutate(listartists = str_split(artists,",")) %>% 
+  rowwise() %>% 
+  mutate(numartists = length(listartists)) %>% 
+  filter(numartists == 1) %>% 
+  group_by(artists) %>% 
+  summarise(tracks = n()) %>% 
+  ungroup() %>%
+  filter(tracks < quantile(tracks, 0.99)) %>% 
+  ggplot(aes(tracks, y = ..density..)) +
+  geom_histogram(bins = 50) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_minimal() +
+  ggtitle("Tracks per Artist - Remove Collaborations")
+  
+# Credit collaborations to each artist
+dat_raw %>% select(artists, id) %>% 
+  mutate(artists = str_remove_all(artists,"\\[|\\]")) %>% 
+  separate_rows(artists, sep = ",") %>% 
+  group_by(artists) %>% 
+  summarise(tracks = n()) %>%
+  ungroup() %>%
+  filter(tracks < quantile(tracks, 0.99)) %>% 
+  ggplot(aes(tracks, y = ..density..)) +
+  geom_histogram(bins = 50) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_minimal() +
+  ggtitle("Tracks per Artist - Contribute Collaborations to each Artist")
+```
+
+Both of these methods reduce the number of artists with one song as expected. The number of artists featured on a track might be interesting to have down the line, so I will create a new feature `num_artists` before moving on.
+
+```{r collab}
+dat_raw %<>% mutate(listartists = str_split(artists,",")) %>% 
+  rowwise() %>% 
+  mutate(num_artists = length(listartists)) %>% 
+  select(-listartists) %>% 
+  ungroup()
+```
+
+Another character variable that might be interesting to explore further is `release_date`. It would make sense to treat this as a date variable instead of a character variable; however, converting this column to a date will throw an error because the format of the release_date column is inconsistent. A quick check on the length of each entry shows that we have three formats present: 69% have the full date in format YYYY-MM-DD, 29% have only the year in format YYYY, and the remaining 1 % have the month and year in format YYYY-MM. 
+
+``` {r release, error=TRUE}
+dat_raw["release_date"] = as.Date(dat_raw["release_date"])
+
+dat_raw %>% select(release_date) %>% 
+  mutate(length_release_date = nchar(release_date)) %>% 
+  group_by(length_release_date) %>% 
+  summarise(rows = n(),
+            pct_rows = round(rows/nrow(dat_raw)*100,1))
+```
+
+This data spans almost 100 years, so year seems acceptable as the most granular level of date data for my use cases. From our summary above, there is already a year column which I will use instead of release_date. I want to get a sense of the distribution of tracks through the years.
+
+```{r year}
+dat_raw %>% ggplot(aes(x=year)) +
+  geom_bar() +
+  scale_x_continuous(breaks = seq(1920,2020,5)) +
+  theme_classic() +
+  ggtitle("Tracks per Year")
+```
+
+From 1949 to present, the dataset has been capped at 2000 tracks per year, so there is a uniform distribution excluding the early 20th century. Year might still be too granular for some use cases, so I will create a new factor variable, decade, grouping every 10 years together beginning with 1921 (i.e. the first decade will be 1921-1930 and the last will be 2011-2020).
+
+```{r decade}
+dat_raw %<>% mutate(decade = factor(case_when(year < 1931 ~ "1921-1930",
+                                              year < 1941 ~ "1931-1940",
+                                              year < 1951 ~ "1941-1950",
+                                              year < 1961 ~ "1951-1960",
+                                              year < 1971 ~ "1961-1970",
+                                              year < 1981 ~ "1971-1980",
+                                              year < 1991 ~ "1981-1990",
+                                              year < 2001 ~ "1991-2000",
+                                              year < 2011 ~ "2001-2010",
+                                              year < 2021 ~ "2011-2020")))
+
+dat_raw %>% ggplot(aes(x=decade)) +
+  geom_bar() +
+  theme_classic() +
+  ggtitle("Tracks per Decade")
+```
+
+I know from the data documentation that a few of the other variables should be factors as well. Two of the numerical variables, mode and explicit, are dummy variables. Mode has a value of 0 for minor and 1 for major while explicit has a value of 0 for not explicit and 1 for explicit. Key is a categorical variable taking on values 0 to 11 for each of the octaves.
+
+```{r factor}
+fact_cols = c("mode","explicit","key")
+dat_raw[fact_cols] <- lapply(dat_raw[fact_cols], factor)
+```
+
+Now I can move on to explore the 11 remaining numeric attributes describing musical qualities of the track.
+
+```{r skim}
+skim(dat_raw)
+```
+
+7 of the variables - `acousticness`, `danceability`, `energy`, `instrumentalness`, `liveness`, `speechiness`, and `valence` - are Spotify derived metrics on a 0 to 1 scale. `duration_ms`, `loudness` (dB), and `tempo` (BPM) describe standard musical characteristics. Finally, `popularity` is a Spotify derived metric ranging from 0 to 100 based primarily on number and recency of plays. The `skimr` summary above provides a sense of the distribution across tracks of each of these variables. Some, such as `danceability` and `tempo` look aproximately normally distributed. Many exhibit strong right skews, such as `instrumntalness` and `liveness`. `acousticness` has a bimodal distribution, with most songs either very clearly acoustic or not at all. I am interested in exploring any correlations that might exist between these variables. 
+
+```{r correlation}
+cor(select_if(dat_raw, is.numeric) %>% select(-num_artists,-year))
+```
+
+The strongest positive correlations are those of `energy` and `loudness` with a correlation of 0.78 and `valence` and `danceability` with a correlation of 0.56. The strongest negative correlations are those of `energy`, `loudness`, and `popularity` with `acousticness` with correlation values of -.75, -.57, and -.59 respectively. I find it interesting that `duration_ms` is not correlated with any variables, the strongest being -.13 with `danceability`. I also expected there to be a strong negative correlation between instrumentalness and speechiness, but that does not appear to be the case.
+
+## Predicting Popularity
+
+Now that I am familiar with the data, I would like to determine whether a track's popularity can be predicted given its musical attributes. I'll start by taking a closer look at the independent variable. 
+
+```{r pophist}
+dat_raw %>% ggplot(aes(x=popularity, y = ..density..)) +
+  geom_histogram(bins = 50,) +
+  scale_y_continuous(labels = scales::percent, breaks = seq(0,.09,.01), limits = c(0,.09)) +
+  theme_classic() +
+  ggtitle("Popularity Histogram")
+```
+
+Popularity is right skewed. About 8-9% of tracks have a popularity of 0. Less than 1% (`r (dat_raw %>% filter(popularity > 75) %>% select(popularity, name) %>% nrow())/nrow(dat_raw) %>% round(4)` to be precise) have a popularity over 75. Because Spotify's algorithm promotes recency of plays, I'll check out popularity by year.
+
+```{r popbox}
+dat_raw %>% ggplot(aes(y=popularity, x=year, group=year)) +
+  geom_boxplot(outlier.size = 0.5, outlier.alpha = 0.5) +
+  scale_x_continuous(breaks = seq(1920,2020,5)) +
+  theme_classic() +
+  ggtitle("Popularity by Year")
+```
+
+Popularity clearly increases with year. This makes sense, as songs recently released are the ones many people will be playing most often on Spotify. 
+
+### Linear Regression
+
+```{r lr}
+
+
+```
