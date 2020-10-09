@@ -26,6 +26,9 @@ library(magrittr)
 library(tidyverse)
 library(skimr)
 
+# for reproducibility
+set.seed(22)
+
 dat_raw <- read_csv(dat_path)
 head(dat_raw)
 skim(dat_raw) %>% select(skim_type, skim_variable, n_missing, character.n_unique)
@@ -203,7 +206,59 @@ Popularity clearly increases with year. This makes sense, as songs recently rele
 
 ### Linear Regression
 
-```{r lr}
+I will start by building an ordinary least squares linear regression model to predict popularity. First I will remove the character variables (artists, id, name, and release_date) and decade which is correlated with year, leaving 15 predictors for popularity. Next I will divide my data into a training set and a testing set 80:20 to better judge the model's performance.
 
+```{r model_dat}
+dat_model = dat_raw %>% select_if(negate(is.character)) %>% select(-decade)
 
+train_ind = sample(nrow(dat_model),floor(.8*nrow(dat_model)))
+dat_train = dat_model[train_ind,]
+dat_test = dat_model[-train_ind,]
 ```
+
+Finally, I can fit the linear regression model.
+
+```{r lr}
+# model
+lm.fit=lm(popularity~.,data=dat_train)
+summary(lm.fit)
+```
+
+From this summary, the F test has a p-value of <2.2e-16 indicating at least one significant independent variable. The t tests of the individual coefficients indicate that all but loudness and the ten of the eleven dummy variables for key are significant with p-values well below .05. On average, popularity will deviate by 10 from the "true" regression line as provided by the residual standard error. Finally, this first attempt at a linear model has a respectable R^2 value of .78 meaning 78% of the variability in popularity can be explained using this set of predictors. Before checking our test data, let's perform some further diagnostics.
+
+```{r lr_diagnose}
+# check residuals and leverage
+par(mfrow=c(2,2))
+plot(lm.fit)
+
+# check collinearity
+regclass::VIF(lm.fit)
+```
+
+The residual plot should not have any clear patterns. A pattern could indicate non-linearity and a funnel-shaped pattern specifically could indicate heteroskedasticity, or a violation of our assumption that the error terms have equal variance. The smoothing line of the residual plot is horizontal at zero, but the residuals do not look completely random because of the bunch of negative residuals at the largest fitted values and the angled negative residual cutoff of the lowest fitted values. The scale-location plot indicates the same information about our residuals. The QQ plot checks the assumption that errors are normally distributed. The residuals have a slight curve and especially stray from the straight line at the extremes indicating more extreme values than expected from a normal distribution or "fat-tails". Looking at the leverage plot, there is one standout high-leverage observation in the top right (75536) that could be influencing coefficients. Finally, all variance inflation factors are below 5 so there does not appear to be collinearity among the variables.
+
+The normal distribution violation and inability to handle the constraint of our response value being between 0 and 100 suggests that OLS linear regression might not be the best fit for this data. For the sake of later model comparison, I will remove loudness and key, the insignificant predictors, and remove the high-leverage observation before using this model to predict the popularity of songs in our test set. 
+
+```{r lr_predict}
+# remove high leverage observation
+dat_train2 <- dat_train[-75536,]
+
+# model
+lm.fit2=lm(popularity~.-loudness-key,data=dat_train2)
+summary(lm.fit2)
+
+# predict
+lm.predicts = predict(lm.fit2, dat_test)
+lm.predicts[lm.predicts < 0] = 0
+lm.predicts[lm.predicts > 100] = 100
+lm.mse = mean((dat_test$popularity - lm.predicts)^2)
+par(pty="s")
+plot(lm.predicts, dat_test$popularity, xlim=c(0,100), ylim=c(0,100), col=alpha("black",.1), xlab="Predicted", ylab="True", main="Popularity Predictions vs True Value")
+lines(seq(1,100,10),seq(1,100,10),col="red")
+```
+
+Predictions less than 0 are forced to 0 and greater than 100 to 100 given that popularity can only take on values 0 to 100. The mean squared error (MSE) is `r lm.mse` which will be a helpful metric to use to compare future models to this linear model. From the plot of the predicted vs true values, it appears that this model does not do a great job of predicting the most popular songs as the maximum prediction is `r round(max(lm.predicts),2)`. 
+
+Although this model might not be incredibly helpful in predicting the most popular songs, one benefit of linear regression is the interpretability of the model coefficients. For example, the coefficient for acousticness is -3.742 indicating that an increase of 1 in acousticness holding all other predictors constant is predicted to lead to a decrease in popularity of 3.7. Speechiness, liveness, and instrumentalness also drive popularity down, while danceability has the most positive impact on popularity.
+
+### To Be Continued...
