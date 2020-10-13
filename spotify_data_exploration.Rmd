@@ -262,3 +262,70 @@ Predictions less than 0 are forced to 0 and greater than 100 to 100 given that p
 Although this model might not be incredibly helpful in predicting the most popular songs, one benefit of linear regression is the interpretability of the model coefficients. For example, the coefficient for acousticness is -3.742 indicating that an increase of 1 in acousticness holding all other predictors constant is predicted to lead to a decrease in popularity of 3.7. Speechiness, liveness, and instrumentalness also drive popularity down, while danceability has the most positive impact on popularity.
 
 ### To Be Continued...
+
+## Classification
+
+In order to predict popularity, I tried several methods intended for a quantitative response variable. Now, I will explore classification techniques with the qualitative variable `explicit`, the 0/1 indicator flagging a song for explicit lyrics.
+
+### Logistic Regression
+
+First, I will try predicting whether or not a song is explicit using logistic regression and the same train/test split from above. 
+
+```{r log_fit}
+glm.fit = glm(explicit~., data=dat_train, family=binomial)
+summary(glm.fit)
+```
+
+```{r log_predict}
+glm.probs = predict(glm.fit, dat_test, type="response")
+glm.preds = ifelse(glm.probs > 0.5, 1, 0)
+table(dat_test$explicit, glm.preds)
+```
+
+Examining the confusion matrix for the predictions on the test data set, this logistic regression model has a respectable `r round((table(dat_test$explicit, glm.preds)[1,1] + table(dat_test$explicit, glm.preds)[2,2])/length(glm.preds)*100,2)`% accuracy rate. The Type I error rate is `r round(table(dat_test$explicit, glm.preds)[1,2]/(table(dat_test$explicit, glm.preds)[1,1] + table(dat_test$explicit, glm.preds)[1,2])*100,2)`% representing the percent of "clean" songs predicted to be explicit while the Type II error rate is `r round(table(dat_test$explicit, glm.preds)[2,1]/(table(dat_test$explicit, glm.preds)[2,1] + table(dat_test$explicit, glm.preds)[2,2])*100,2)`% representing the percent of explicit songs predicted to be clean. Let's say we have a use case where we are more concerned about missing explicit songs than accidentally labeling clean songs as explicit. We could lower the probability threshold for a prediction to be labeled as explicit from 0.5 to say 0.25. This would decrease the Type II error rate at the expense of the Type I error rate.
+
+```{r log_predict2}
+glm.probs = predict(glm.fit, dat_test, type="response")
+glm.preds = ifelse(glm.probs > 0.25, 1, 0)
+table(dat_test$explicit, glm.preds)
+```
+
+The overall accuracy rate has decreased to `r round((table(dat_test$explicit, glm.preds)[1,1] + table(dat_test$explicit, glm.preds)[2,2])/length(glm.preds)*100,2)`% and the Type I error rate has increased to `r round(table(dat_test$explicit, glm.preds)[1,2]/(table(dat_test$explicit, glm.preds)[1,1] + table(dat_test$explicit, glm.preds)[1,2])*100,2)`%, but the Type II error rate that we are concerned about has been cut in half and is now at `r round(table(dat_test$explicit, glm.preds)[2,1]/(table(dat_test$explicit, glm.preds)[2,1] + table(dat_test$explicit, glm.preds)[2,2])*100,2)`%.
+
+Like linear regression, one advantage of logistic regression is interpretability. The magnitude of the coefficient tells us the impact of the predictor on the logit. I can quickly determine which predictors increase the probability of a song being flagged as explicit by looking for positive coefficients, for example danceability and speechiness.
+
+### Linear/Quadratic Discriminant Analysis
+For comparison, I will try a different approach to classifying a song as explicit or not. Linear and quadratic discrimant analysis model the distributions of the predictors in each class of the response in order to output the probability of a new observation belonging to one of the classes.
+
+```{r lda_fit}
+lda.fit = MASS::lda(explicit~., data=dat_train)
+lda.preds=predict(lda.fit, dat_test)
+table(dat_test$explicit,lda.preds$class)
+
+qda.fit = MASS::qda(explicit~., data=dat_train)
+qda.preds=predict(qda.fit, dat_test)
+table(dat_test$explicit,qda.preds$class)
+```
+
+The confusion matrix resulting from linear discriminant analysis is similar to that of logistic regression. This is to be expected, as both model the probability of belonging to one of the classes as a linear function of the predictors. The accuracy rate is slightly lower at `r round((table(dat_test$explicit,lda.preds$class)[1,1] + table(dat_test$explicit,lda.preds$class)[2,2])/nrow(dat_test)*100,2)`%. QDA on the other hand models the probability as a quadratic function of the predictors. In this case it has a superior Test II error rate but the worst accuracy rate of `r round((table(dat_test$explicit,qda.preds$class)[1,1] + table(dat_test$explicit,qda.preds$class)[2,2])/nrow(dat_test)*100,2)`%. So it appears that in this case, logistic regression is superior.
+
+### KNN
+K-nearest neighbors, instead of modeling the probability that an observation belongs to a class, predicts the class based on the class of the majority of the nearest training observations. I will arbitrarily use the 3 nearest neighbors to start.
+
+```{r knn_fit}
+knn.preds=class::knn(select(dat_train,-explicit), select(dat_test,-explicit), dat_train$explicit, k=3)
+table(dat_test$explicit,knn.preds)
+```
+
+Using 3 nearest neighbors, KNN provides an accuracy rate of `r round((table(dat_test$explicit,knn.preds)[1,1] + table(dat_test$explicit,knn.preds)[2,2])/length(knn.preds)*100,2)`% which is better than QDA but still not as good as logistic regression. KNN is sensitive to differences in scale of the predictors. Most of our predictors are on a 0 to 1 scale but let's standardize the dataset so that the variables that are not on this scale, such as duration_ms and loudness, do not throw off results.
+
+```{r knn_fit_standardize}
+st_dat_train = cbind(scale(select_if(dat_train,is.numeric)),select_if(dat_train,is.factor))
+st_dat_test = cbind(scale(select_if(dat_test,is.numeric)),select_if(dat_test,is.factor))
+
+knn.preds=class::knn(select(st_dat_train,-explicit), select(st_dat_test,-explicit), st_dat_train$explicit, k=3)
+table(dat_test$explicit,knn.preds)
+```
+Scaling the predictors did improve accuracy to `r round((table(dat_test$explicit,knn.preds)[1,1] + table(dat_test$explicit,knn.preds)[2,2])/length(knn.preds)*100,2)`%, which is even better than logistic regression's `r round((table(dat_test$explicit, glm.preds)[1,1] + table(dat_test$explicit, glm.preds)[2,2])/length(glm.preds)*100,2)`%.
+
+### To Be Continued...

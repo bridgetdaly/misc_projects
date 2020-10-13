@@ -1199,6 +1199,122 @@ lines(seq(1,100,10),seq(1,100,10),col=&quot;red&quot;)</code></pre>
 <h3>To Be Continued…</h3>
 </div>
 </div>
+<div id="classification" class="section level2">
+<h2>Classification</h2>
+<p>In order to predict popularity, I tried several methods intended for a quantitative response variable. Now, I will explore classification techniques with the qualitative variable <code>explicit</code>, the 0/1 indicator flagging a song for explicit lyrics.</p>
+<div id="logistic-regression" class="section level3">
+<h3>Logistic Regression</h3>
+<p>First, I will try predicting whether or not a song is explicit using logistic regression and the same train/test split from above.</p>
+<pre class="r"><code>glm.fit = glm(explicit~., data=dat_train, family=binomial)
+summary(glm.fit)</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = explicit ~ ., family = binomial, data = dat_train)
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -3.3376  -0.2344  -0.0783  -0.0225   4.8151  
+## 
+## Coefficients:
+##                    Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept)      -1.132e+02  2.842e+00 -39.821  &lt; 2e-16 ***
+## acousticness     -2.777e+00  6.807e-02 -40.805  &lt; 2e-16 ***
+## danceability      3.962e+00  1.065e-01  37.206  &lt; 2e-16 ***
+## duration_ms      -3.072e-06  1.815e-07 -16.925  &lt; 2e-16 ***
+## energy           -9.307e-01  1.104e-01  -8.428  &lt; 2e-16 ***
+## instrumentalness -5.189e-01  9.914e-02  -5.234 1.66e-07 ***
+## key1              3.329e-01  5.365e-02   6.205 5.46e-10 ***
+## key2             -6.078e-02  5.828e-02  -1.043 0.297035    
+## key3             -3.051e-01  9.558e-02  -3.192 0.001411 ** 
+## key4             -2.915e-02  6.391e-02  -0.456 0.648286    
+## key5             -1.872e-01  6.384e-02  -2.933 0.003354 ** 
+## key6              8.602e-02  6.130e-02   1.403 0.160525    
+## key7              4.505e-02  5.506e-02   0.818 0.413251    
+## key8             -9.902e-04  6.390e-02  -0.015 0.987637    
+## key9             -1.871e-01  6.007e-02  -3.115 0.001842 ** 
+## key10            -9.824e-02  6.470e-02  -1.519 0.128871    
+## key11             2.227e-01  5.771e-02   3.859 0.000114 ***
+## liveness          4.478e-01  7.712e-02   5.807 6.35e-09 ***
+## loudness          1.024e-01  6.154e-03  16.645  &lt; 2e-16 ***
+## mode1            -2.647e-01  2.837e-02  -9.330  &lt; 2e-16 ***
+## popularity        3.903e-03  1.363e-03   2.865 0.004176 ** 
+## speechiness       8.483e+00  9.156e-02  92.654  &lt; 2e-16 ***
+## tempo            -9.373e-04  4.555e-04  -2.058 0.039603 *  
+## valence          -1.954e+00  6.789e-02 -28.776  &lt; 2e-16 ***
+## year              5.563e-02  1.433e-03  38.828  &lt; 2e-16 ***
+## num_artists       1.115e-01  1.587e-02   7.029 2.09e-12 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 78822  on 135926  degrees of freedom
+## Residual deviance: 40400  on 135901  degrees of freedom
+## AIC: 40452
+## 
+## Number of Fisher Scoring iterations: 8</code></pre>
+<pre class="r"><code>glm.probs = predict(glm.fit, dat_test, type=&quot;response&quot;)
+glm.preds = ifelse(glm.probs &gt; 0.5, 1, 0)
+table(dat_test$explicit, glm.preds)</code></pre>
+<pre><code>##    glm.preds
+##         0     1
+##   0 30564   503
+##   1  1474  1441</code></pre>
+<p>Examining the confusion matrix for the predictions on the test data set, this logistic regression model has a respectable 94.18% accuracy rate. The Type I error rate is 1.62% representing the percent of “clean” songs predicted to be explicit while the Type II error rate is 50.57% representing the percent of explicit songs predicted to be clean. Let’s say we have a use case where we are more concerned about missing explicit songs than accidentally labeling clean songs as explicit. We could lower the probability threshold for a prediction to be labeled as explicit from 0.5 to say 0.25. This would decrease the Type II error rate at the expense of the Type I error rate.</p>
+<pre class="r"><code>glm.probs = predict(glm.fit, dat_test, type=&quot;response&quot;)
+glm.preds = ifelse(glm.probs &gt; 0.25, 1, 0)
+table(dat_test$explicit, glm.preds)</code></pre>
+<pre><code>##    glm.preds
+##         0     1
+##   0 29381  1686
+##   1   777  2138</code></pre>
+<p>The overall accuracy rate has decreased to 92.75% and the Type I error rate has increased to 5.43%, but the Type II error rate that we are concerned about has been cut in half and is now at 26.66%.</p>
+<p>Like linear regression, one advantage of logistic regression is interpretability. The magnitude of the coefficient tells us the impact of the predictor on the logit. I can quickly determine which predictors increase the probability of a song being flagged as explicit by looking for positive coefficients, for example danceability and speechiness.</p>
+</div>
+<div id="linearquadratic-discriminant-analysis" class="section level3">
+<h3>Linear/Quadratic Discriminant Analysis</h3>
+<p>For comparison, I will try a different approach to classifying a song as explicit or not. Linear and quadratic discrimant analysis model the distributions of the predictors in each class of the response in order to output the probability of a new observation belonging to one of the classes.</p>
+<pre class="r"><code>lda.fit = MASS::lda(explicit~., data=dat_train)
+lda.preds=predict(lda.fit, dat_test)
+table(dat_test$explicit,lda.preds$class)</code></pre>
+<pre><code>##    
+##         0     1
+##   0 30281   786
+##   1  1467  1448</code></pre>
+<pre class="r"><code>qda.fit = MASS::qda(explicit~., data=dat_train)
+qda.preds=predict(qda.fit, dat_test)
+table(dat_test$explicit,qda.preds$class)</code></pre>
+<pre><code>##    
+##         0     1
+##   0 27928  3139
+##   1   792  2123</code></pre>
+<p>The confusion matrix resulting from linear discriminant analysis is similar to that of logistic regression. This is to be expected, as both model the probability of belonging to one of the classes as a linear function of the predictors. The accuracy rate is slightly lower at 93.37%. QDA on the other hand models the probability as a quadratic function of the predictors. In this case it has a superior Test II error rate but the worst accuracy rate of 88.43%. So it appears that in this case, logistic regression is superior.</p>
+</div>
+<div id="knn" class="section level3">
+<h3>KNN</h3>
+<p>K-nearest neighbors, instead of modeling the probability that an observation belongs to a class, predicts the class based on the class of the majority of the nearest training observations. I will arbitrarily use the 3 nearest neighbors to start.</p>
+<pre class="r"><code>knn.preds=class::knn(select(dat_train,-explicit), select(dat_test,-explicit), dat_train$explicit, k=3)
+table(dat_test$explicit,knn.preds)</code></pre>
+<pre><code>##    knn.preds
+##         0     1
+##   0 30140   927
+##   1  2378   537</code></pre>
+<p>Using 3 nearest neighbors, KNN provides an accuracy rate of 90.27% which is better than QDA but still not as good as logistic regression. KNN is sensitive to differences in scale of the predictors. Most of our predictors are on a 0 to 1 scale but let’s standardize the dataset so that the variables that are not on this scale, such as duration_ms and loudness, do not throw off results.</p>
+<pre class="r"><code>st_dat_train = cbind(scale(select_if(dat_train,is.numeric)),select_if(dat_train,is.factor))
+st_dat_test = cbind(scale(select_if(dat_test,is.numeric)),select_if(dat_test,is.factor))
+
+knn.preds=class::knn(select(st_dat_train,-explicit), select(st_dat_test,-explicit), st_dat_train$explicit, k=3)
+table(dat_test$explicit,knn.preds)</code></pre>
+<pre><code>##    knn.preds
+##         0     1
+##   0 30366   701
+##   1  1343  1572</code></pre>
+<p>Scaling the predictors did improve accuracy to 93.99%, which is even better than logistic regression’s 92.75%.</p>
+</div>
+<div id="to-be-continued-1" class="section level3">
+<h3>To Be Continued…</h3>
+</div>
+</div>
 
 
 
