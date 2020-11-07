@@ -261,6 +261,53 @@ Predictions less than 0 are forced to 0 and greater than 100 to 100 given that p
 
 Although this model might not be incredibly helpful in predicting the most popular songs, one benefit of linear regression is the interpretability of the model coefficients. For example, the coefficient for acousticness is -3.742 indicating that an increase of 1 in acousticness holding all other predictors constant is predicted to lead to a decrease in popularity of 3.7. Speechiness, liveness, and instrumentalness also drive popularity down, while danceability has the most positive impact on popularity.
 
+### Lasso Regression
+Although our model has a reasonable number of predictors and all appear to be significant, I am curious to see if certain variables will be excluded using lasso regression. I will use cross-validation to obtain the best lambda.
+
+```{r lasso_fit}
+library(glmnet)
+lasso.fit=glmnet(data.matrix(select(dat_train2,-popularity)),dat_train2$popularity,alpha=1)
+lasso.cv=cv.glmnet(data.matrix(select(dat_train2,-popularity)),dat_train2$popularity,alpha=1)
+plot(lasso.cv)
+```
+
+The best lambda is `r round(lasso.cv$lambda.min,2)` which is very close to zero indicating that all variables should remain in the model as initially believed.
+
+### Decision Trees
+Another technique we can use for prediction is a regression decision tree.
+
+```{r tree_fit, message=FALSE}
+library(tree)
+tree.fit = tree(popularity~.,dat_train)
+plot(tree.fit)
+text(tree.fit)
+
+tree.predicts = predict(tree.fit, dat_test)
+tree.predicts[tree.predicts < 0] = 0
+tree.predicts[tree.predicts > 100] = 100
+tree.mse = mean((dat_test$popularity - tree.predicts)^2)
+```
+
+This tree only uses year to predict popularity and actually outperforms the linear regression model, with a mean squared error of `r tree.mse`. I bet we can improve the prediction further by using a random forest. To reduce the time needed to train the random forest, I will only use a small fraction of the training data.
+
+```{r rf_fit, message=FALSE}
+library(randomForest)
+reduced_samp = sample(nrow(dat_train),floor(.1*nrow(dat_train)))
+dat_train_reduced = dat_train[reduced_samp,]
+rf.fit = randomForest(popularity~.,dat_train_reduced,importance=TRUE)
+
+rf.predicts = predict(rf.fit, dat_test)
+rf.predicts[rf.predicts < 0] = 0
+rf.predicts[rf.predicts > 100] = 100
+rf.mse = mean((dat_test$popularity - rf.predicts)^2)
+
+importance(rf.fit)
+varImpPlot(rf.fit)
+
+```
+
+As expected, the MSE of the random forest is the lowest achieved at `r rf.mse`. Using the full training dataset and exploring parameters using a validation set would also likely further improve the MSE. We can also explore the variable importance using the random forest results. The plot indicates that year is clearly the most important variable in predicting popularity.
+
 ### To Be Continued...
 
 ## Classification
@@ -327,5 +374,6 @@ knn.preds=class::knn(select(st_dat_train,-explicit), select(st_dat_test,-explici
 table(dat_test$explicit,knn.preds)
 ```
 Scaling the predictors did improve accuracy to `r round((table(dat_test$explicit,knn.preds)[1,1] + table(dat_test$explicit,knn.preds)[2,2])/length(knn.preds)*100,2)`%, which is even better than logistic regression's `r round((table(dat_test$explicit, glm.preds)[1,1] + table(dat_test$explicit, glm.preds)[2,2])/length(glm.preds)*100,2)`%.
+
 
 ### To Be Continued...
