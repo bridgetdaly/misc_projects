@@ -375,5 +375,30 @@ table(dat_test$explicit,knn.preds)
 ```
 Scaling the predictors did improve accuracy to `r round((table(dat_test$explicit,knn.preds)[1,1] + table(dat_test$explicit,knn.preds)[2,2])/length(knn.preds)*100,2)`%, which is even better than logistic regression's `r round((table(dat_test$explicit, glm.preds)[1,1] + table(dat_test$explicit, glm.preds)[2,2])/length(glm.preds)*100,2)`%.
 
+###Support Vector Machines
+Finally, I will fit a support vector classifier which attempts to find the separation boundary between the classes with the greatest margin. As with the random forest above, I will use a reduced sample for runtime purposes. Cross-validation is used to select the cost parameter.
+
+```{r svm_lin, message=FALSE}
+library(e1071)
+svm.cv=tune(svm,explicit~., data=dat_train_reduced, kernel="linear", ranges=list(cost=c(0.001,0.01,0.1,1,5,10,100)))
+summary(svm.cv)
+svm.fit=svm.cv$best.model
+svm.preds=predict(svm.fit, dat_test)
+table(dat_test$explicit,svm.preds)
+```
+
+Using cost paramater `r svm.fit$cost` this classifier relies on `r svm.fit$tot.nSV` observations (support vectors) to create a separation boundary. The accuracy of predictions is `r round((table(dat_test$explicit,svm.preds)[1,1] + table(dat_test$explicit,svm.preds)[2,2])/length(svm.preds)*100,2)`% which is just about the same as the scaled KNN classifier. The support vector classifier is weaker at identifying explicit songs however, making more Type II errors than the KNN classifier.
+
+I will also try a support vector machine with a non-linear kernel.
+```{r svm_poly}
+svmp.cv=tune(svm,explicit~., data=dat_train_reduced, kernel="polynomial", ranges=list(cost=c(0.01,0.1),
+gamma=c(0.25,0.5)))
+summary(svmp.cv)
+svmp.fit=svmp.cv$best.model
+svmp.preds=predict(svmp.fit, dat_test)
+table(dat_test$explicit,svmp.preds)
+```
+
+Using a polynomial kernel the accuracy rate is `r round((table(dat_test$explicit,svmp.preds)[1,1] + table(dat_test$explicit,svmp.preds)[2,2])/length(svmp.preds)*100,2)`% which is the best of all methods tried for this problem. Using cross-validation to try other cost and gamma parameter combinations as well as using the full training data set might even further improve the accuracy.
 
 ### To Be Continued...

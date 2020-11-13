@@ -1371,6 +1371,67 @@ table(dat_test$explicit,knn.preds)</code></pre>
 ##   0 30367   700
 ##   1  1343  1572</code></pre>
 <p>Scaling the predictors did improve accuracy to 93.99%, which is even better than logistic regression’s 92.75%.</p>
+<p>###Support Vector Machines Finally, I will fit a support vector classifier which attempts to find the separation boundary between the classes with the greatest margin. As with the random forest above, I will use a reduced sample for runtime purposes. Cross-validation is used to select the cost parameter.</p>
+<pre class="r"><code>library(e1071)
+svm.cv=tune(svm,explicit~., data=dat_train_reduced, kernel=&quot;linear&quot;, ranges=list(cost=c(0.001,0.01,0.1,1,5,10,100)))
+summary(svm.cv)</code></pre>
+<pre><code>## 
+## Parameter tuning of 'svm':
+## 
+## - sampling method: 10-fold cross validation 
+## 
+## - best parameters:
+##  cost
+##    10
+## 
+## - best performance: 0.06268407 
+## 
+## - Detailed performance results:
+##    cost      error  dispersion
+## 1 1e-03 0.08276912 0.007916719
+## 2 1e-02 0.06650998 0.007238164
+## 3 1e-01 0.06305193 0.006700362
+## 4 1e+00 0.06290476 0.006710905
+## 5 5e+00 0.06290476 0.006683957
+## 6 1e+01 0.06268407 0.006625961
+## 7 1e+02 0.06268407 0.006625961</code></pre>
+<pre class="r"><code>svm.fit=svm.cv$best.model
+svm.preds=predict(svm.fit, dat_test)
+table(dat_test$explicit,svm.preds)</code></pre>
+<pre><code>##    svm.preds
+##         0     1
+##   0 30546   521
+##   1  1542  1373</code></pre>
+<p>Using cost paramater 10 this classifier relies on 2024 observations (support vectors) to create a separation boundary. The accuracy of predictions is 93.93% which is just about the same as the scaled KNN classifier. The support vector classifier is weaker at identifying explicit songs however, making more Type II errors than the KNN classifier.</p>
+<p>I will also try a support vector machine with a non-linear kernel.</p>
+<pre class="r"><code>svmp.cv=tune(svm,explicit~., data=dat_train_reduced, kernel=&quot;polynomial&quot;, ranges=list(cost=c(0.01,0.1),
+gamma=c(0.25,0.5)))
+summary(svmp.cv)</code></pre>
+<pre><code>## 
+## Parameter tuning of 'svm':
+## 
+## - sampling method: 10-fold cross validation 
+## 
+## - best parameters:
+##  cost gamma
+##  0.01   0.5
+## 
+## - best performance: 0.05665271 
+## 
+## - Detailed performance results:
+##   cost gamma      error  dispersion
+## 1 0.01  0.25 0.05731453 0.009875542
+## 2 0.10  0.25 0.05672613 0.009723121
+## 3 0.01  0.50 0.05665271 0.010279822
+## 4 0.10  0.50 0.06400927 0.008208604</code></pre>
+<pre class="r"><code>svmp.fit=svmp.cv$best.model
+svmp.preds=predict(svmp.fit, dat_test)
+table(dat_test$explicit,svmp.preds)</code></pre>
+<pre><code>##    svmp.preds
+##         0     1
+##   0 30550   517
+##   1  1345  1570</code></pre>
+<p>Using a polynomial kernel the accuracy rate is 94.52% which is the best of all methods tried for this problem. Using cross-validation to try other cost and gamma parameter combinations as well as using the full training data set might even further improve the accuracy.</p>
 </div>
 <div id="to-be-continued-1" class="section level3">
 <h3>To Be Continued…</h3>
