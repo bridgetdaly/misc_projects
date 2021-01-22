@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Background
 
-This project is an exploratory analysis of the "Spotify Dataset 1921-2020, 160k+ Tracks" uploaded to [kaggle](https://www.kaggle.com/yamaerenay/spotify-dataset-19212020-160k-tracks) by Yamac Eren Ay who sourced the data via the Spotify Web API. Inspiration taken from the labs in the [Introduction to Statistical Learning](http://faculty.marshall.usc.edu/gareth-james/ISL/) by Gareth James, Daniela Witten, Trevor Hastie and Robert Tibshirani.
+This project is an exploratory analysis of the "Spotify Dataset 1921-2020, 160k+ Tracks" uploaded to [kaggle](https://www.kaggle.com/yamaerenay/spotify-dataset-19212020-160k-tracks) by Yamac Eren Ay who sourced the data via the Spotify Web API. Inspiration taken from the labs in the [Introduction to Statistical Learning](http://faculty.marshall.usc.edu/gareth-james/ISL/) by Gareth James, Daniela Witten, Trevor Hastie and Robert Tibshirani. The intention is not to build the best model but rather practice with the various techniques presented in ISL.
 
 ## Data Exploration
 
@@ -34,7 +34,7 @@ head(dat_raw)
 skim(dat_raw) %>% select(skim_type, skim_variable, n_missing, character.n_unique)
 ```
 
-From this summary I see that there are `r nrow(dat_raw)` rows in the dataset, unique by the character attribute `id`, Spotify's track identifier. There is no missing data in any column. Aside from id, there are three other character attributes: `artists`, `name`, and `release_date`. I want to dive deeper into the `artists` column. There are `r n_unique(dat_raw$artists)` unique artists, so naively dividing the number of tracks by the number of artists yields an average of `r round(n_unique(dat_raw$id)/n_unique(dat_raw$artists),0)` tracks per artist.
+From this summary I see there are `r nrow(dat_raw)` rows in the dataset, unique by the character attribute `id`, Spotify's track identifier. There is no missing data in any column. Aside from id, there are three other character attributes: `artists`, `name`, and `release_date`. I want to dive deeper into the `artists` column. There are `r n_unique(dat_raw$artists)` unique artists, so naively dividing the number of tracks by the number of artists yields an average of `r round(n_unique(dat_raw$id)/n_unique(dat_raw$artists),0)` tracks per artist.
 
 ```{r artisthist}
 dat_raw %>% group_by(artists) %>% 
@@ -129,7 +129,7 @@ dat_raw %>% select(release_date) %>%
             pct_rows = round(rows/nrow(dat_raw)*100,1))
 ```
 
-This data spans almost 100 years, so year seems acceptable as the most granular level of date data for my use cases. From our summary above, there is already a year column which I will use instead of release_date. I want to get a sense of the distribution of tracks through the years.
+This data spans almost 100 years, so year seems acceptable as the most granular level of date data for my use cases. From our summary above, there is already a `year` column which I will use instead of `release_date`. I want to get a sense of the distribution of tracks through the years.
 
 ```{r year}
 dat_raw %>% ggplot(aes(x=year)) +
@@ -139,7 +139,7 @@ dat_raw %>% ggplot(aes(x=year)) +
   ggtitle("Tracks per Year")
 ```
 
-From 1949 to present, the dataset has been capped at 2000 tracks per year, so there is a uniform distribution excluding the early 20th century. Year might still be too granular for some use cases, so I will create a new factor variable, decade, grouping every 10 years together beginning with 1921 (i.e. the first decade will be 1921-1930 and the last will be 2011-2020).
+From 1949 to present, the dataset has been capped at 2000 tracks per year, so there is a uniform distribution excluding the early 20th century. Year might still be too granular for some use cases, so I will create a new factor variable, `decade`, grouping every 10 years together beginning with 1921 (i.e. the first will be 1921-1930 and the last will be 2011-2020).
 
 ```{r decade}
 dat_raw %<>% mutate(decade = factor(case_when(year < 1931 ~ "1921-1930",
@@ -159,7 +159,7 @@ dat_raw %>% ggplot(aes(x=decade)) +
   ggtitle("Tracks per Decade")
 ```
 
-I know from the data documentation that a few of the other variables should be factors as well. Two of the numerical variables, mode and explicit, are dummy variables. Mode has a value of 0 for minor and 1 for major while explicit has a value of 0 for not explicit and 1 for explicit. Key is a categorical variable taking on values 0 to 11 for each of the octaves.
+I know from the data documentation that a few of the other variables should be factors as well. Two of the numerical variables, `mode` and `explicit`, are dummy variables. `mode` has a value of 0 for minor and 1 for major while `explicit` has a value of 0 for not explicit and 1 for explicit. `key` is a categorical variable taking on values 0 to 11 for each of the octaves.
 
 ```{r factor}
 fact_cols = c("mode","explicit","key")
@@ -178,11 +178,11 @@ skim(dat_raw)
 cor(select_if(dat_raw, is.numeric) %>% select(-num_artists,-year))
 ```
 
-The strongest positive correlations are those of `energy` and `loudness` with a correlation of 0.78 and `valence` and `danceability` with a correlation of 0.56. The strongest negative correlations are those of `energy`, `loudness`, and `popularity` with `acousticness` with correlation values of -.75, -.57, and -.59 respectively. I find it interesting that `duration_ms` is not correlated with any variables, the strongest being -.13 with `danceability`. I also expected there to be a strong negative correlation between instrumentalness and speechiness, but that does not appear to be the case.
+The strongest positive correlations are those of `energy` and `loudness` with a correlation of 0.78 and `valence` and `danceability` with a correlation of 0.56. The strongest negative correlations are those of `energy`, `loudness`, and `popularity` with `acousticness` with correlation values of -.75, -.57, and -.59 respectively. I find it interesting that `duration_ms` is not correlated with any variables, the strongest being -.13 with `danceability`. I also expected there to be a strong negative correlation between `instrumentalness` and `speechiness`, but that does not appear to be the case.
 
 ## Predicting Popularity
 
-Now that I am familiar with the data, I would like to determine whether a track's popularity can be predicted given its musical attributes. I'll start by taking a closer look at the independent variable. 
+Now that I am familiar with the data, I would like to determine whether a track's popularity can be predicted given its musical attributes. I'll start by taking a closer look at the variable `popularity`. 
 
 ```{r pophist}
 dat_raw %>% ggplot(aes(x=popularity, y = ..density..)) +
@@ -206,7 +206,7 @@ Popularity clearly increases with year. This makes sense, as songs recently rele
 
 ### Linear Regression
 
-I will start by building an ordinary least squares linear regression model to predict popularity. First I will remove the character variables (artists, id, name, and release_date) and decade which is correlated with year, leaving 15 predictors for popularity. Next I will divide my data into a training set and a testing set 80:20 to better judge the model's performance.
+I will start by building an ordinary least squares linear regression model to predict popularity. First I will remove the character variables (`artists`, `id`, `name`, and `release_date`) and `decade` which is correlated with year, leaving 15 predictors for `popularity`. Next I will divide my data into a training set and a testing set 80:20 to better judge the model's performance. (If I were truly interested in building the best model I would include a validation set to compare the various models before using the test set only on the final model.)
 
 ```{r model_dat}
 dat_model = dat_raw %>% select_if(negate(is.character)) %>% select(-decade)
@@ -224,7 +224,7 @@ lm.fit=lm(popularity~.,data=dat_train)
 summary(lm.fit)
 ```
 
-From this summary, the F test has a p-value of <2.2e-16 indicating at least one significant independent variable. The t tests of the individual coefficients indicate that all but loudness and the ten of the eleven dummy variables for key are significant with p-values well below .05. On average, popularity will deviate by 10 from the "true" regression line as provided by the residual standard error. Finally, this first attempt at a linear model has a respectable R^2 value of .78 meaning 78% of the variability in popularity can be explained using this set of predictors. Before checking our test data, let's perform some further diagnostics.
+From this summary, the F test has a p-value of <2.2e-16 indicating at least one significant independent variable. The t tests of the individual coefficients indicate that all but `loudness` and ten of the eleven dummy variables for key are significant with p-values well below .05. On average, popularity will deviate by 10 from the "true" regression line as provided by the residual standard error. Finally, this first attempt at a linear model has a respectable R^2 value of .78 meaning 78% of the variability in popularity can be explained using this set of predictors. Before checking our test data, let's perform some further diagnostics.
 
 ```{r lr_diagnose}
 # check residuals and leverage
@@ -274,7 +274,7 @@ plot(lasso.cv)
 The best lambda is `r round(lasso.cv$lambda.min,2)` which is very close to zero indicating that all variables should remain in the model as initially believed.
 
 ### Decision Trees
-Another technique we can use for prediction is a regression decision tree.
+Another technique for prediction is a regression decision tree.
 
 ```{r tree_fit, message=FALSE}
 library(tree)
@@ -308,8 +308,6 @@ varImpPlot(rf.fit)
 
 As expected, the MSE of the random forest is the lowest achieved at `r rf.mse`. Using the full training dataset and exploring parameters using a validation set would also likely further improve the MSE. We can also explore the variable importance using the random forest results. The plot indicates that year is clearly the most important variable in predicting popularity.
 
-### To Be Continued...
-
 ## Classification
 
 In order to predict popularity, I tried several methods intended for a quantitative response variable. Now, I will explore classification techniques with the qualitative variable `explicit`, the 0/1 indicator flagging a song for explicit lyrics.
@@ -329,7 +327,7 @@ glm.preds = ifelse(glm.probs > 0.5, 1, 0)
 table(dat_test$explicit, glm.preds)
 ```
 
-Examining the confusion matrix for the predictions on the test data set, this logistic regression model has a respectable `r round((table(dat_test$explicit, glm.preds)[1,1] + table(dat_test$explicit, glm.preds)[2,2])/length(glm.preds)*100,2)`% accuracy rate. The Type I error rate is `r round(table(dat_test$explicit, glm.preds)[1,2]/(table(dat_test$explicit, glm.preds)[1,1] + table(dat_test$explicit, glm.preds)[1,2])*100,2)`% representing the percent of "clean" songs predicted to be explicit while the Type II error rate is `r round(table(dat_test$explicit, glm.preds)[2,1]/(table(dat_test$explicit, glm.preds)[2,1] + table(dat_test$explicit, glm.preds)[2,2])*100,2)`% representing the percent of explicit songs predicted to be clean. Let's say we have a use case where we are more concerned about missing explicit songs than accidentally labeling clean songs as explicit. We could lower the probability threshold for a prediction to be labeled as explicit from 0.5 to say 0.25. This would decrease the Type II error rate at the expense of the Type I error rate.
+Examining the confusion matrix for the predictions on the test data set, this logistic regression model has accuracy rate `r round((table(dat_test$explicit, glm.preds)[1,1] + table(dat_test$explicit, glm.preds)[2,2])/length(glm.preds)*100,2)`%. The Type I error rate is `r round(table(dat_test$explicit, glm.preds)[1,2]/(table(dat_test$explicit, glm.preds)[1,1] + table(dat_test$explicit, glm.preds)[1,2])*100,2)`% representing the percent of "clean" songs predicted to be explicit while the Type II error rate is `r round(table(dat_test$explicit, glm.preds)[2,1]/(table(dat_test$explicit, glm.preds)[2,1] + table(dat_test$explicit, glm.preds)[2,2])*100,2)`% representing the percent of explicit songs predicted to be clean. Let's say we have a use case where we are more concerned about missing explicit songs than accidentally labeling clean songs as explicit. We could lower the probability threshold for a prediction to be labeled as explicit from 0.5 to say 0.25. This would decrease the Type II error rate at the expense of the Type I error rate.
 
 ```{r log_predict2}
 glm.probs = predict(glm.fit, dat_test, type="response")
@@ -339,7 +337,7 @@ table(dat_test$explicit, glm.preds)
 
 The overall accuracy rate has decreased to `r round((table(dat_test$explicit, glm.preds)[1,1] + table(dat_test$explicit, glm.preds)[2,2])/length(glm.preds)*100,2)`% and the Type I error rate has increased to `r round(table(dat_test$explicit, glm.preds)[1,2]/(table(dat_test$explicit, glm.preds)[1,1] + table(dat_test$explicit, glm.preds)[1,2])*100,2)`%, but the Type II error rate that we are concerned about has been cut in half and is now at `r round(table(dat_test$explicit, glm.preds)[2,1]/(table(dat_test$explicit, glm.preds)[2,1] + table(dat_test$explicit, glm.preds)[2,2])*100,2)`%.
 
-Like linear regression, one advantage of logistic regression is interpretability. The magnitude of the coefficient tells us the impact of the predictor on the logit. I can quickly determine which predictors increase the probability of a song being flagged as explicit by looking for positive coefficients, for example danceability and speechiness.
+Like linear regression, one advantage of logistic regression is interpretability. The magnitude of the coefficient tells us the impact of the predictor on the logit. I can quickly determine which predictors increase the probability of a song being flagged as explicit by looking for positive coefficients, for example `danceability` and `speechiness`.
 
 ### Linear/Quadratic Discriminant Analysis
 For comparison, I will try a different approach to classifying a song as explicit or not. Linear and quadratic discrimant analysis model the distributions of the predictors in each class of the response in order to output the probability of a new observation belonging to one of the classes.
@@ -354,7 +352,7 @@ qda.preds=predict(qda.fit, dat_test)
 table(dat_test$explicit,qda.preds$class)
 ```
 
-The confusion matrix resulting from linear discriminant analysis is similar to that of logistic regression. This is to be expected, as both model the probability of belonging to one of the classes as a linear function of the predictors. The accuracy rate is slightly lower at `r round((table(dat_test$explicit,lda.preds$class)[1,1] + table(dat_test$explicit,lda.preds$class)[2,2])/nrow(dat_test)*100,2)`%. QDA on the other hand models the probability as a quadratic function of the predictors. In this case it has a superior Test II error rate but the worst accuracy rate of `r round((table(dat_test$explicit,qda.preds$class)[1,1] + table(dat_test$explicit,qda.preds$class)[2,2])/nrow(dat_test)*100,2)`%. So it appears that in this case, logistic regression is superior.
+The confusion matrix resulting from linear discriminant analysis is similar to that of logistic regression. This is to be expected, as both model the probability of belonging to one of the classes as a linear function of the predictors. The accuracy rate is slightly lower at `r round((table(dat_test$explicit,lda.preds$class)[1,1] + table(dat_test$explicit,lda.preds$class)[2,2])/nrow(dat_test)*100,2)`%. QDA on the other hand models the probability as a quadratic function of the predictors. In this case it has a superior Test II error rate but the worst accuracy rate of `r round((table(dat_test$explicit,qda.preds$class)[1,1] + table(dat_test$explicit,qda.preds$class)[2,2])/nrow(dat_test)*100,2)`%.
 
 ### KNN
 K-nearest neighbors, instead of modeling the probability that an observation belongs to a class, predicts the class based on the class of the majority of the nearest training observations. I will arbitrarily use the 3 nearest neighbors to start.
@@ -364,7 +362,7 @@ knn.preds=class::knn(select(dat_train,-explicit), select(dat_test,-explicit), da
 table(dat_test$explicit,knn.preds)
 ```
 
-Using 3 nearest neighbors, KNN provides an accuracy rate of `r round((table(dat_test$explicit,knn.preds)[1,1] + table(dat_test$explicit,knn.preds)[2,2])/length(knn.preds)*100,2)`% which is better than QDA but still not as good as logistic regression. KNN is sensitive to differences in scale of the predictors. Most of our predictors are on a 0 to 1 scale but let's standardize the dataset so that the variables that are not on this scale, such as duration_ms and loudness, do not throw off results.
+Using 3 nearest neighbors, KNN provides an accuracy rate of `r round((table(dat_test$explicit,knn.preds)[1,1] + table(dat_test$explicit,knn.preds)[2,2])/length(knn.preds)*100,2)`% which is better than QDA but still not as good as logistic regression. KNN is sensitive to differences in scale of the predictors. Most of our predictors are on a 0 to 1 scale but let's standardize the dataset so that the variables that are not on this scale, such as `duration_ms` and `loudness`, do not throw off results.
 
 ```{r knn_fit_standardize}
 st_dat_train = cbind(scale(select_if(dat_train,is.numeric)),select_if(dat_train,is.factor))
@@ -375,7 +373,7 @@ table(dat_test$explicit,knn.preds)
 ```
 Scaling the predictors did improve accuracy to `r round((table(dat_test$explicit,knn.preds)[1,1] + table(dat_test$explicit,knn.preds)[2,2])/length(knn.preds)*100,2)`%, which is even better than logistic regression's `r round((table(dat_test$explicit, glm.preds)[1,1] + table(dat_test$explicit, glm.preds)[2,2])/length(glm.preds)*100,2)`%.
 
-###Support Vector Machines
+### Support Vector Machines
 Finally, I will fit a support vector classifier which attempts to find the separation boundary between the classes with the greatest margin. As with the random forest above, I will use a reduced sample for runtime purposes. Cross-validation is used to select the cost parameter.
 
 ```{r svm_lin, message=FALSE}
@@ -400,5 +398,3 @@ table(dat_test$explicit,svmp.preds)
 ```
 
 Using a polynomial kernel the accuracy rate is `r round((table(dat_test$explicit,svmp.preds)[1,1] + table(dat_test$explicit,svmp.preds)[2,2])/length(svmp.preds)*100,2)`% which is the best of all methods tried for this problem. Using cross-validation to try other cost and gamma parameter combinations as well as using the full training data set might even further improve the accuracy.
-
-### To Be Continued...
